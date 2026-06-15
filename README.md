@@ -12,7 +12,7 @@ Acquiring a large-scale, labeled dataset of defective fiber end-faces is highly 
 * **Data Pipeline**: Custom PyTorch `Dataset` class applying real-time data augmentation (rotations, Gaussian blur) to ensure model generalization.
 * **Performance**: Achieved XX% validation accuracy.
 
-## Demo
+## Demos
 ![Defect Demo](defect.png) 
 ![Pass Demo](clean_surface.png) 
 
