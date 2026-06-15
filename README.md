@@ -10,7 +10,7 @@ Acquiring a large-scale, labeled dataset of defective fiber end-faces is highly 
 * **Framework**: PyTorch
 * **Architecture**: Custom 4-layer CNN with Max Pooling, Batch Normalization, and Dropout to prevent overfitting on synthetic data.
 * **Data Pipeline**: Custom PyTorch `Dataset` class applying real-time data augmentation (rotations, Gaussian blur) to ensure model generalization.
-* **Performance**: Achieved XX% validation accuracy.
+* **Performance**: Achieved 100% validation accuracy.
 
 ## Demos
 ![Defect Demo](defect.png) 
