@@ -1,0 +1,25 @@
+# Environments
+.env
+.venv
+env/
+venv/
+ENV/
+env.bak/
+macOS/
+
+# PyTorch Model Weights
+*.pth
+*.pt
+*.ckpt
+
+# Datasets
+data/raw/
+data/synthetic_generated/
+*.jpg
+*.png
+
+# Python Cache
+__pycache__/
+*.py[cod]
+*$py.class
+.ipynb_checkpoints/
