@@ -13,7 +13,8 @@ Acquiring a large-scale, labeled dataset of defective fiber end-faces is highly 
 * **Performance**: Achieved XX% validation accuracy.
 
 ## Demo
-[Insert GIF here showing the Gradio web interface analyzing an uploaded image]
+![Defect Demo](defect.png) 
+![Pass Demo](clean_surface.png) 
 
 ## Local Setup
 ```bash
