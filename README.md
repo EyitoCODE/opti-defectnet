@@ -17,6 +17,6 @@ Acquiring a large-scale, labeled dataset of defective fiber end-faces is highly 
 
 ## Local Setup
 ```bash
-git clone [https://github.com/yourusername/opti-defectnet.git](https://github.com/yourusername/opti-defectnet.git)
+git clone https://github.com/EyitoCODE/opti-defectnet.git
 pip install -r requirements.txt
 python app/main.py
