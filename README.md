@@ -89,3 +89,11 @@ The application implements an active MLOps feedback loop. When deployed in a man
 * **Archived Imagery**: High-resolution copies of flagged or corrected end-face images are archived inside: flagged_feedback/images/
 
 * **Retraining Integration**: The data stored in flagged_feedback/images/ and audited via curated_feedback_log.csv can be ingested directly into subsequent training pipelines to continuously fine-tune model weights against edge cases encountered in production.
+
+
+# Demo 
+
+
+![Clean Surface Demo](data\demo\clean_surafce.png)
+
+![Defect Detected Demo](data\demo\defect_detected.png)
