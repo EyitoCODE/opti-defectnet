@@ -22,3 +22,6 @@ data/synthetic_generated/
 # Python Cache (Exclude compiled bytecode and cache folders)
 __pycache__/
 *.pyc
+
+# csv files for flagged feedback
+flagged_feedback
