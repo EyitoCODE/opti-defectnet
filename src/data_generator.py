@@ -9,6 +9,7 @@ import cv2
 import numpy as np
 import os
 import random
+import shutil
 
 def generate_fiber_image(is_defective, img_size=256):
     """
@@ -59,6 +60,12 @@ def build_dataset(samples_per_class=1000, base_dir="data/synthetic_generated"):
     
     Fine-tuning and Iteration: Modify samples_per_class to scale dataset size up or down.
     """
+
+    # Actively destroy the old directory to prevent dataset contamination
+    if os.path.exists(base_dir):
+        shutil.rmtree(base_dir)
+
+
     classes = {'pass': False, 'fail': True}
     for cls_name, is_defective in classes.items():
         dir_path = os.path.join(base_dir, cls_name)
