@@ -96,4 +96,4 @@ The application implements an active MLOps feedback loop. When deployed in a man
 
 ![Clean Surface Demo](data/demo/clean_surafce.png)
 
-![Defect Detected Demo](data\demo\defect_detected.png)
+![Defect Detected Demo](data/demo/defect_detected.png)
