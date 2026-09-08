@@ -13,11 +13,12 @@ import torch
 from torchvision import transforms
 from PIL import Image
 import sys
+from model import OptiNet
 
 # Add the 'src' directory to the Python path so local modules like model.py can be imported.
 # Fine-tuning and Iteration: Adjust the path if you reorganize your directory structure.
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'src')))
-from model import OptiNet
+
 
 # Define the compute device for inference.
 # Fine-tuning and Iteration: Change to cuda if running on an NVIDIA GPU, or mps for Apple Silicon.
