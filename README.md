@@ -1,99 +1,73 @@
-# Opti-DefectNet: Fiber Surface Inspection AI
+# Opti-DefectNet: Synthetic Fiber Inspection Prototype
 
-## Overview
-Opti-DefectNet is an end-to-end Machine Learning Operations (MLOps) pipeline designed to automate the quality assurance of optical fiber end-faces. Built from scratch using PyTorch and OpenCV, the system leverages a custom Convolutional Neural Network (CNN) to detect microscopic surface defects—such as scratches, pits, and debris contamination—classifying components as manufacturing-viable or defective. It features a complete workflow including procedural data generation, model training, performance evaluation, and an interactive Gradio web application with manual human-in-the-loop feedback logging.
+A PyTorch/OpenCV research prototype for inspecting synthetic optical-fiber end-face
+images. A four-stage CNN classifies clean/defective images; a Gradio interface
+supports inference and manual feedback logging.
 
----
+**Scope:** images are procedurally generated. Performance on real microscope
+images and manufacturing acceptance criteria have not been validated. Synthetic
+test accuracy is not real-fiber accuracy.
 
-## Project Structure & Architecture
-The repository is organized into modular directories to separate core logic, dataset assets, model weights, and deployment interfaces:
+## Reproducible workflow
 
-```text
-opti-defectnet/
-├── app/
-│   └── main.py                 # Gradio web interface & interactive feedback logging
-├── data/
-│   └── synthetic_generated/    # Procedurally generated training images (Pass / Fail)
-├── models/
-│   └── opti_net_v1.pth         # Serialized model weights generated after training
-├── src/
-│   ├── data_generator.py       # OpenCV script for generating synthetic fiber imagery
-│   ├── dataset.py              # PyTorch Dataset subclass with real-time data augmentation
-│   ├── model.py                # Custom 4-layer CNN architecture definition
-│   ├── train.py                # Training script with 80/20 train/validation split
-│   └── evaluate.py             # Standalone accuracy testing script
-├── flagged_feedback/           # Runtime UI feedback logs and corrected images
-│   ├── images/                 # Saved image captures from user submissions
-│   └── curated_feedback_log.csv# Human-readable audit log of predictions vs. user corrections
-├── .gitignore                  # Excludes virtual environments, weights, datasets, and logs
-├── README.md                   # Comprehensive system documentation
-└── requirements.txt            # Project Python dependencies
-```
-
-## Technical Implementation
-* **Architecture**:  A custom 4-stage convolutional neural network (OptiNet) featuring progressive feature map expansion (16 -> 32 -> 64 -> 128 channels), Batch Normalization for gradient stability, 2x2 Max Pooling for spatial downsampling, and a Dropout layer ($p=0.5$) in the fully connected dense layers to prevent overfitting.
-
-* **Data Pipeline**: A custom PyTorch Dataset pipeline that ingests 2,000 synthetically generated images (1,000 pass, 1,000 fail) and applies real-time data augmentations (random horizontal/vertical flips, rotations up to 15 degrees, Gaussian blur, and tensor normalization across RGB channels).
-
-* **Training & Optimization:**: Managed via train.py utilizing the Adam optimizer ($\text{lr} = 0.001$), Cross-Entropy Loss, and an 80/20 stratified split.
-
-## Quick Start
-Follow these steps to clone the repository, generate data, train the model, evaluate performance, and launch the user interface from scratch.
+Requires Python 3.10+. Run from the repository root:
 
 ```bash
-# 1. Clone the repository and navigate into it
 git clone https://github.com/EyitoCODE/opti-defectnet.git
 cd opti-defectnet
-
-# 2. Create and activate a virtual environment
 python -m venv .venv
-.\.venv\Scripts\activate  # If on Windows 
-source .venv/bin/activate  # If on Mac/Linux
-
-# 3. Install dependencies
-pip install -r requirements.txt
-
-# 4. Generate the synthetic dataset
-python src/data_generator.py
-
-# Fine-tuning: Open src/data_generator.py and adjust samples_per_class or modify the OpenCV drawing loop parameters to simulate different scratch sizes or noise densities.
-
-# 5. Train the CNN model.
-python src/train.py
-
-# Output: Successfully saves trained weights to models/opti_net_v1.pth.
-
-# Fine-tuning: Open src/train.py to adjust hyper-parameters such as learning rate (lr), batch size, or total epochs.
-
-# 6. Evaluate Model Accuracy
+# macOS/Linux:
+source .venv/bin/activate
+# Windows PowerShell: .venv\Scripts\Activate.ps1
+python -m pip install -r requirements.txt
+python src/data_generator.py --samples-per-class 1000 --seed 42
+python src/train.py --epochs 5 --batch-size 32 --seed 42
 python src/evaluate.py
-
-# 7. Launch the Gradio Web UI
 python app/main.py
-
-```
-## Accessing Important Data & Feedback Logs
-The application implements an active MLOps feedback loop. When deployed in a manufacturing setting or reviewed during an evaluation, users can submit corrections for misclassified samples directly through the web interface.
-
-* **CSV Schema**:
-```text
-# 1. Timestamp: Exact date and time of the inspection
-# 2. Image File: Relative file path to the saved image capture.
-# 3. Automated Model Prediction: The class predicted by OptiNet (Pass vs. Fail).
-# 4. Model Confidence: Percentage confidence score of the prediction.
-# 5. User Correction / Flag Tag: The manual category tag selected by the quality inspector.
 ```
 
-* **Audit Logs**: All user interactions, model prediction confidence scores, and correction tags are logged automatically into a clean, human-readable CSV file located at:flagged_feedback/curated_feedback_log.csv
+Generation refuses to overwrite existing data by default. To regenerate synthetic
+files explicitly pass `--overwrite`, then retrain. Checkpoints from the earlier
+pipeline must be retrained before held-out evaluation.
 
-* **Archived Imagery**: High-resolution copies of flagged or corrected end-face images are archived inside: flagged_feedback/images/
+## Evaluation design
 
-* **Retraining Integration**: The data stored in flagged_feedback/images/ and audited via curated_feedback_log.csv can be ingested directly into subsequent training pipelines to continuously fine-tune model weights against edge cases encountered in production.
+- Seeded, stratified **70% train / 15% validation / 15% test** assignment per class;
+  integer rounding applies to small datasets.
+- Independent datasets apply random augmentation **only to training**.
+- Deterministic validation preprocessing; lowest validation loss selects the checkpoint.
+- Test images are excluded from training and checkpoint selection.
+- SHA-256 fingerprints reject changed datasets and duplicate image content.
+- The checkpoint is bound to its split manifest.
+- `models/test_metrics.json` contains accuracy, defect precision/recall/F1,
+  false negatives and a confusion matrix (rows=actual, columns=predicted).
+  Undefined ratios are JSON null.
 
+Do not tune repeatedly on the test results. A new model-development cycle needs
+an independently held-out test set. The seeded CPU baseline is reproducible within
+a fixed software/hardware environment; cross-version bitwise equivalence is not promised.
 
-# Demo 
+## Checks
 
+```bash
+python -m unittest discover -s tests -v
+```
 
-![Clean Surface Demo](data/demo/clean_surafce.png)
+GitHub Actions checks split integrity and metric arithmetic, then smoke-tests data
+generation, one training epoch and held-out evaluation on a tiny synthetic dataset.
+The smoke test establishes pipeline execution, not model quality.
 
-![Defect Detected Demo](data/demo/defect_detected.png)
+## Layout
+
+- `src/data_generator.py`: seeded samples with signed sensor noise.
+- `src/splits.py`: dataset fingerprints and disjoint split manifests.
+- `src/dataset.py`: separate training/evaluation transformations.
+- `src/train.py`: validation-based checkpoint selection.
+- `src/evaluate.py`: held-out metrics and checkpoint/manifest checks.
+- `app/main.py`: local Gradio interface and CSV/image feedback collection.
+
+Feedback is logged locally in `flagged_feedback/`. Retraining and independent
+validation remain explicit steps.
+
+Next steps: a consented real-image benchmark, microscope/lighting robustness
+tests, and assessment of false negatives under realistic defect distributions.

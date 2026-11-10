@@ -1,108 +1,71 @@
-"""
-Opti-DefectNet: Training Pipeline with Validation
-
-This script orchestrates the end-to-end model training loop, managing dataset splitting,
-forward and backward optimization passes, validation evaluation, and weight serialization.
-"""
+"""Select the best validation checkpoint without inspecting the test split."""
+import argparse
+import json
+import random
+from pathlib import Path
+import numpy as np
 import torch
-import torch.nn as nn
-import torch.optim as optim
-from torch.utils.data import DataLoader, random_split
+from torch import nn
+from torch.utils.data import DataLoader
 from dataset import FiberDataset
 from model import OptiNet
-import os
+from splits import build_manifest, fingerprint
 
-def train_model():
-    """
-    Executes the model training process across defined epochs, calculating loss,
-    updating weights, tracking validation accuracy, and saving final checkpoints.
-    """
-    # Select hardware backend for tensor computations.
-    # Fine-tuning and Iteration: Change to "cuda" if running on an NVIDIA GPU for accelerated training.
-    device = torch.device("cpu")
-    print(f"Executing on computational backend: {device}")
 
-    # Load the full synthetic dataset using training augmentations.
-    data_path = 'data/synthetic_generated'
-    full_dataset = FiberDataset(data_dir=data_path, is_train=True)
-
-    # Implement an 80/20 train-to-validation split to monitor generalization.
-    # Fine-tuning and Iteration: Adjust percentage ratios (e.g., 0.85/0.15) if altering split sizes.
-    train_size = int(0.8 * len(full_dataset))
-    val_size = len(full_dataset) - train_size
-    train_dataset, val_dataset = random_split(full_dataset, [train_size, val_size])
-
-    # Wrap datasets into DataLoaders to process samples in mini-batches.
-    # Fine-tuning and Iteration: Adjust batch_size (e.g., 16, 32, 64) based on system memory.
-    train_loader = DataLoader(train_dataset, batch_size=32, shuffle=True)
-    val_loader = DataLoader(val_dataset, batch_size=32, shuffle=False)
-
-    # Initialize model instance, loss function, and optimizer.
-    model = OptiNet().to(device)
-    
-    # CrossEntropyLoss combines LogSoftmax and NLLLoss, ideal for multi-class/binary classification logits.
-    criterion = nn.CrossEntropyLoss()
-    
-    # Adam optimizer adapts learning rates per parameter using first and second moment estimates.
-    # Fine-tuning and Iteration: Adjust learning rate lr (e.g., 0.0001 to 0.01) if model fails to converge.
-    optimizer = optim.Adam(model.parameters(), lr=0.001)
-
-    epochs = 5
-    # Fine-tuning and Iteration: Increase epochs (e.g., 10 or 20) for deeper convergence on complex datasets.
+def train_model(data_dir="data/synthetic_generated", output_dir="models",
+                epochs=5, batch_size=32, seed=42):
+    if epochs < 1 or batch_size < 1:
+        raise ValueError("epochs and batch_size must be positive")
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    torch.use_deterministic_algorithms(True)
+    manifest = build_manifest(data_dir, seed)
+    training = FiberDataset(data_dir, True, manifest["splits"]["train"])
+    validation = FiberDataset(data_dir, False, manifest["splits"]["validation"])
+    generator = torch.Generator().manual_seed(seed)
+    train_loader = DataLoader(training, batch_size=batch_size, shuffle=True, generator=generator)
+    val_loader = DataLoader(validation, batch_size=batch_size, shuffle=False)
+    model, criterion = OptiNet(), nn.CrossEntropyLoss()
+    optimizer = torch.optim.Adam(model.parameters(), lr=.001)
+    output = Path(output_dir)
+    output.mkdir(parents=True, exist_ok=True)
+    best_loss, history = float("inf"), []
     for epoch in range(epochs):
-        # Phase 1: Training Loop
-        model.train() 
-        running_train_loss = 0.0
-        for inputs, labels in train_loader:
-            inputs, labels = inputs.to(device), labels.to(device)
-            
-            # Clear previous step gradient computations.
+        model.train()
+        train_loss = 0.
+        for images, labels in train_loader:
             optimizer.zero_grad()
-            
-            # Forward pass: compute predicted logits.
-            outputs = model(inputs)
-            
-            # Calculate classification loss.
-            loss = criterion(outputs, labels)
-            
-            # Backward pass: compute gradients via backpropagation.
+            loss = criterion(model(images), labels)
             loss.backward()
-            
-            # Update network weights.
             optimizer.step()
-            
-            running_train_loss += loss.item()
-            
-        # Phase 2: Validation Loop
+            train_loss += loss.item() * labels.size(0)
         model.eval()
-        running_val_loss = 0.0
-        correct = 0
-        total = 0
-        
-        # Disable gradient tracking during validation.
+        val_loss, correct = 0., 0
         with torch.no_grad():
-            for inputs, labels in val_loader:
-                inputs, labels = inputs.to(device), labels.to(device)
-                outputs = model(inputs)
-                loss = criterion(outputs, labels)
-                running_val_loss += loss.item()
-                
-                # Determine predicted class indices.
-                _, predicted = torch.max(outputs.data, 1)
-                total += labels.size(0)
-                correct += (predicted == labels).sum().item()
+            for images, labels in val_loader:
+                logits = model(images)
+                val_loss += criterion(logits, labels).item() * labels.size(0)
+                correct += (logits.argmax(1) == labels).sum().item()
+        val_loss /= len(validation)
+        row = {"epoch": epoch + 1, "train_loss": train_loss / len(training),
+               "validation_loss": val_loss, "validation_accuracy": correct / len(validation)}
+        history.append(row)
+        print(json.dumps(row), flush=True)
+        if val_loss < best_loss:
+            best_loss = val_loss
+            torch.save({"model_state_dict": model.state_dict(), "split_id": fingerprint(manifest),
+                        "epoch": epoch + 1, "seed": seed}, output / "opti_net_v1.pth")
+    (output / "split_manifest.json").write_text(json.dumps(manifest, indent=2) + "\n")
+    (output / "training_history.json").write_text(json.dumps(history, indent=2) + "\n")
+    print("Saved best validation checkpoint. Test images were not used for model selection.")
 
-        # Compute epoch summary metrics.
-        avg_train_loss = running_train_loss / len(train_loader)
-        avg_val_loss = running_val_loss / len(val_loader)
-        val_accuracy = 100 * correct / total
-        
-        print(f"Epoch {epoch + 1}/{epochs} | Train Loss: {avg_train_loss:.4f} | Val Loss: {avg_val_loss:.4f} | Val Accuracy: {val_accuracy:.2f}%")
-
-    # Save serialized model weights to disk after training completion.
-    os.makedirs('models', exist_ok=True)
-    torch.save(model.state_dict(), 'models/opti_net_v1.pth')
-    print("Model weights serialized and saved.")
 
 if __name__ == "__main__":
-    train_model()
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--data-dir", default="data/synthetic_generated")
+    parser.add_argument("--output-dir", default="models")
+    parser.add_argument("--epochs", type=int, default=5)
+    parser.add_argument("--batch-size", type=int, default=32)
+    parser.add_argument("--seed", type=int, default=42)
+    train_model(**vars(parser.parse_args()))

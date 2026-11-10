@@ -10,6 +10,7 @@ import numpy as np
 import os
 import random
 import shutil
+import argparse
 
 def generate_fiber_image(is_defective, img_size=256):
     """
@@ -31,8 +32,8 @@ def generate_fiber_image(is_defective, img_size=256):
     # Inject Gaussian sensor noise to simulate camera grain and texture.
     # Fine-tuning and Iteration: Increase the standard deviation parameter (e.g., from 15 to 30) 
     # to introduce heavier sensor noise.
-    noise = np.random.normal(0, 15, img.shape).astype(np.uint8)
-    img = cv2.add(img, noise)
+    noise = np.random.normal(0, 15, img.shape)
+    img = np.clip(img.astype(np.float32) + noise, 0, 255).astype(np.uint8)
 
     # Conditionally inject structural defects if the sample is flagged as defective.
     if is_defective:
@@ -53,7 +54,7 @@ def generate_fiber_image(is_defective, img_size=256):
     img = cv2.GaussianBlur(img, (3, 3), 0)
     return img
 
-def build_dataset(samples_per_class=1000, base_dir="data/synthetic_generated"):
+def build_dataset(samples_per_class=1000, base_dir="data/synthetic_generated", seed=42, overwrite=False):
     """
     Automates the mass generation and directory sorting of synthetic images 
     into 'pass' and 'fail' training folders.
@@ -61,8 +62,13 @@ def build_dataset(samples_per_class=1000, base_dir="data/synthetic_generated"):
     Fine-tuning and Iteration: Modify samples_per_class to scale dataset size up or down.
     """
 
-    # Actively destroy the old directory to prevent dataset contamination
+    if samples_per_class < 3:
+        raise ValueError('Need at least 3 samples per class')
+    random.seed(seed)
+    np.random.seed(seed)
     if os.path.exists(base_dir):
+        if not overwrite:
+            raise FileExistsError('Dataset exists; choose another --base-dir or explicitly use --overwrite')
         shutil.rmtree(base_dir)
 
 
@@ -77,6 +83,10 @@ def build_dataset(samples_per_class=1000, base_dir="data/synthetic_generated"):
             cv2.imwrite(os.path.join(dir_path, f"sample_{i:04d}.jpg"), img)
             
 if __name__ == "__main__":
-    print("Initializing synthetic data generation pipeline...")
-    build_dataset(samples_per_class=1000)
-    print("Dataset generation complete.")
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--samples-per-class", type=int, default=1000)
+    parser.add_argument("--base-dir", default="data/synthetic_generated")
+    parser.add_argument("--seed", type=int, default=42)
+    parser.add_argument("--overwrite", action="store_true")
+    build_dataset(**vars(parser.parse_args()))
+    print("Synthetic dataset generated.")

@@ -27,7 +27,8 @@ model = OptiNet()
 
 # Load the serialized model weights from training.
 # Fine-tuning and Iteration: Update the file path if you train a newer model version such as opti_net_v2.pth.
-model.load_state_dict(torch.load('models/opti_net_v1.pth', map_location=device))
+checkpoint = torch.load('models/opti_net_v1.pth', map_location=device, weights_only=True)
+model.load_state_dict(checkpoint.get('model_state_dict', checkpoint))
 model.eval() # Set the model to evaluation mode to disable dropout and batch normalization updates.
 
 # Define the input preprocessing pipeline for inference.
@@ -121,7 +122,7 @@ def log_feedback(image, prediction, user_tag):
 # Fine-tuning and Iteration: Add CSS themes or custom branding elements here if customizing the UI.
 with gr.Blocks(title="Opti-DefectNet: Automated QA") as demo:
     gr.Markdown("# Opti-DefectNet: Automated QA")
-    gr.Markdown("Upload a microscopic image to detect optical anomalies and provide corrective feedback.")
+    gr.Markdown("Research prototype trained on synthetic imagery. Real-fiber accuracy is unvalidated; predictions are not manufacturing acceptance decisions.")
     
     with gr.Row():
         with gr.Column():

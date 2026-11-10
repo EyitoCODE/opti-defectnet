@@ -1,59 +1,43 @@
-"""
-Opti-DefectNet: Standalone Model Evaluation
-
-This script loads serialized model weights and runs inference against 
-an evaluation dataset to compute and report overall classification accuracy.
-"""
+"""Evaluate only the held-out split bound to the training checkpoint."""
+import argparse
+import json
+from pathlib import Path
 import torch
 from torch.utils.data import DataLoader
 from dataset import FiberDataset
 from model import OptiNet
+from splits import validate_manifest, fingerprint
+from metrics import classification_metrics
 
-def evaluate_model():
-    """
-    Initializes the model architecture, loads trained weights, and processes 
-    batches through an evaluation data loader to measure performance.
-    """
-    # Set the computation device.
-    # Fine-tuning and Iteration: Change to cuda if evaluating on an NVIDIA GPU.
-    device = torch.device("cpu")
+
+def evaluate_model(data_dir="data/synthetic_generated", model_dir="models", batch_size=32):
+    directory = Path(model_dir)
+    manifest = validate_manifest(
+        json.loads((directory / "split_manifest.json").read_text()), data_dir)
+    checkpoint = torch.load(directory / "opti_net_v1.pth", map_location="cpu", weights_only=True)
+    if checkpoint.get("split_id") != fingerprint(manifest):
+        raise ValueError("Checkpoint and split manifest do not match; retrain")
+    dataset = FiberDataset(data_dir, False, manifest["splits"]["test"])
+    loader = DataLoader(dataset, batch_size=batch_size, shuffle=False)
     model = OptiNet()
-    
-    # Attempt to load serialized model weights from disk.
-    try:
-        model.load_state_dict(torch.load('models/opti_net_v1.pth', map_location=device))
-    except FileNotFoundError:
-        print("ERROR: Model weights not found. Please run src/train.py first.")
-        return
-
-    # Set the model to evaluation mode (disables dropout and freezes batch normalization).
+    model.load_state_dict(checkpoint["model_state_dict"])
     model.eval()
-    
-    # Load dataset in evaluation mode (is_train=False disables random augmentations).
-    data_path = 'data/synthetic_generated'
-    eval_dataset = FiberDataset(data_dir=data_path, is_train=False)
-    
-    # Construct a DataLoader to process samples in batches.
-    # Fine-tuning and Iteration: Adjust batch_size depending on your system memory limits.
-    eval_loader = DataLoader(eval_dataset, batch_size=32, shuffle=False)
-
-    correct = 0
-    total = 0
-    
-    # Disable gradient calculation to conserve memory and accelerate evaluation speed.
+    labels, predictions = [], []
     with torch.no_grad():
-        for inputs, labels in eval_loader:
-            outputs = model(inputs)
-            
-            # Extract the predicted class index (highest logit score across the 2 outputs).
-            _, predicted = torch.max(outputs.data, 1)
-            
-            total += labels.size(0)
-            correct += (predicted == labels).sum().item()
+        for images, actual in loader:
+            predictions.extend(model(images).argmax(1).tolist())
+            labels.extend(actual.tolist())
+    metrics = classification_metrics(labels, predictions)
+    metrics.update({"evaluation_split": "test", "split_id": fingerprint(manifest),
+                    "data_scope": "synthetic imagery; real-fiber performance is unvalidated"})
+    (directory / "test_metrics.json").write_text(json.dumps(metrics, indent=2) + "\n")
+    print(json.dumps(metrics, indent=2))
+    return metrics
 
-    # Calculate and display overall model accuracy percentage.
-    accuracy = 100 * correct / total
-    print(f"Evaluated {total} images. Accuracy: {accuracy:.2f}%")
 
 if __name__ == "__main__":
-    evaluate_model()
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--data-dir", default="data/synthetic_generated")
+    parser.add_argument("--model-dir", default="models")
+    parser.add_argument("--batch-size", type=int, default=32)
+    evaluate_model(**vars(parser.parse_args()))
